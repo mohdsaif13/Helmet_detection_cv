@@ -1,0 +1,5 @@
+nc: 2
+names: ['with_helmet', 'without_helmet']
+train: /content/drive/MyDrive/dataset/images/train
+val: /content/drive/MyDrive/dataset/images/val
+test: /content/drive/MyDrive/dataset/images/test
