@@ -1,284 +1,287 @@
-\# YOLOv8 Helmet Detection
+# 🪖 YOLOv8 Helmet Detection
 
+Real-time helmet detection using **YOLOv8, OpenCV, PyTorch and FastAPI** for safety-compliance applications.
 
+The repository contains the complete workflow for dataset preparation, YOLOv8 training, image/video inference, webcam detection, REST API serving and Docker deployment.
 
-Real-time helmet detection using YOLOv8 for industrial safety applications. This project provides an end-to-end pipeline from dataset collection and annotation to training, inference, REST API deployment, and Docker containerization.
+## ✨ Highlights
 
+- Real-time helmet / no-helmet detection
+- YOLOv8 object-detection pipeline
+- **6,000+ annotated images** used for model development
+- **86% mAP** reported in the project evaluation
+- Approximately **1.5 ms inference latency** reported for the established inference pipeline
+- FastAPI REST endpoint for image prediction
+- Docker-ready deployment
+- Webcam inference support
+- Reproducible local dataset configuration
 
+## 🧰 Tech Stack
 
----
+**Python · YOLOv8 · Ultralytics · PyTorch · OpenCV · FastAPI · Docker · NumPy · Pillow**
 
+## 📁 Project Structure
 
-
-\##  Project Overview
-
-
-
-\- \*\*Problem Statement:\*\* Ensure safety compliance by detecting helmets in industrial environments.
-
-\- \*\*Goal:\*\* Train a YOLOv8 model for accurate real-time helmet detection.
-
-\- \*\*Pipeline:\*\*
-
-&nbsp; 1. Dataset collection \& annotation
-
-&nbsp; 2. Model training via Jupyter Notebook and modular scripts
-
-&nbsp; 3. Inference on images/videos
-
-&nbsp; 4. REST API integration using FastAPI
-
-&nbsp; 5. Docker deployment for easy portability
-
-&nbsp; 6. Live testing and evaluation
-
-
-
----
-
-
-
-\##  Project Structure
-
-
-
-helmet-detection/
-
-├── data/
-
-│ ├── images/
-
-│ │ ├── train/
-
-│ │ └── val/
-
-│ └── labels/
-
-├── train/
-
-├── val/
-
-├── notebooks/
-
-│ └── helmet\_detection\_yolov8.ipynb
-
-├── model/
-
-│ └── yolov8/
-
-├── src/
-
-│ ├── train.py
-
-│ ├── detect.py
-
-│ └── utils.py
-
+```text
+Helmet_detection_cv/
 ├── app/
-
-│ └── app.py
-
-├── README.md
-
-├── requirements.txt
-
+│   └── app.py                 # FastAPI application
+├── data/
+│   ├── images/
+│   │   ├── train/
+│   │   ├── val/
+│   │   └── test/
+│   └── data.yaml              # Local dataset configuration
+├── model/
+│   └── best.pt                # Trained model (Git LFS)
+├── notebooks/
+│   └── helmet-detection-yolov8s.ipynb
+├── src/
+│   ├── train.py               # Training pipeline
+│   ├── detect.py              # Image/video inference
+│   ├── utils.py               # Training utilities
+│   └── webcam_feed.py         # Live webcam detection
 ├── Dockerfile
+├── requirements.txt
+└── readme.md
+```
 
-├── .gitignore
+## 🚀 Quick Start
 
-└── .env
-
-
-
----
-
-
-
-\##  Installation
-
-
-
-1\. \*\*Clone the repository:\*\*
-
-
+### 1. Clone
 
 ```bash
+git clone https://github.com/mohdsaif13/Helmet_detection_cv.git
+cd Helmet_detection_cv
+```
 
-git clone <repository\_url>
+### 2. Install dependencies
 
-cd helmet-detection
+Python **3.10** is recommended.
 
+```bash
+python -m venv .venv
 
+# Windows
+.venv\Scripts\activate
 
-2\. \*\*Install dependencies:\*\*
+# Linux/macOS
+source .venv/bin/activate
 
+pip install --upgrade pip
 pip install -r requirements.txt
+```
 
-Ensure ultralytics YOLOv8 is installed for model training and inference.
+### 3. Dataset configuration
 
+The repository expects the dataset under:
 
-
-3\. \*\*Dataset Preparation:\*\*
-
-
-
--Collect helmet images from Roboflow, Kaggle, CCTV footage, or custom sources.
-
-
-
--Annotate images using LabelImg or Roboflow in YOLO .txt format.
-
-
-
--Organize the dataset:
-
+```text
 data/
-
 ├── images/
-
 │   ├── train/
+│   ├── val/
+│   └── test/
+└── data.yaml
+```
 
-│   └── val/
+The included `data/data.yaml` uses repository-relative paths:
 
-└── labels/
+```yaml
+path: .
+train: data/images/train
+val: data/images/val
+test: data/images/test
 
-&nbsp;   ├── train/
+nc: 2
+names:
+  0: with_helmet
+  1: without_helmet
+```
 
-&nbsp;   └── val/
+This avoids machine-specific paths such as local Google Drive or Windows directories.
 
--Create and configure data.yaml specifying classes and dataset paths.
+## 🧠 Train the Model
 
+Train with the modular pipeline:
 
+```bash
+python src/train.py --data data/data.yaml --epochs 50 --img-size 640 --batch-size 16
+```
 
-4\. \*\*Model Training:\*\*
+The best checkpoint is copied into:
 
+```text
+model/yolov8/best.pt
+```
 
+## 🔍 Run Inference
 
-a. Via Notebook:
+Using the trained model:
 
+```bash
+python src/detect.py --weights model/best.pt --source data/images/test
+```
 
+Or use another YOLO checkpoint:
 
--Open notebooks/helmet\_detection\_yolov8.ipynb
+```bash
+python src/detect.py --weights path/to/best.pt --source path/to/images
+```
 
+Prediction overlays are saved under the generated `runs/detect/` directory.
 
+## 📷 Webcam Detection
 
--Configure data.yaml paths
+The webcam script now uses a portable model path instead of a machine-specific Windows path.
 
+Default:
 
+```bash
+python src/webcam_feed.py
+```
 
--Train the YOLOv8 model using the notebook cells
+Change the camera index when necessary:
 
+```text
+CAMERA_INDEX=1
+```
 
+On Windows PowerShell:
 
-b. Via Modular Script:
+```powershell
+$env:CAMERA_INDEX="1"
+python src/webcam_feed.py
+```
 
-&nbsp;python src/train.py --data data/data.yaml --epochs 50 --img-size 640 --batch-size 16
+Optional recording:
 
+```powershell
+$env:SAVE_OUTPUT="true"
+python src/webcam_feed.py
+```
 
+## 🌐 FastAPI
 
-5\. \*\*Inference:\*\*
+Start the API:
 
-from ultralytics import YOLO
-
-
-
-model = YOLO("model/yolov8/best.pt")
-
-results = model.predict(source="data/images/val/sample1.jpg", conf=0.5, save=True, save\_txt=True)
-
-results.show()
-
-
-
-\- Outputs saved in runs/detect/exp/ folder
-
-
-
-6\. \*\*REST API with FastAPI:\*\*
-
-
-
-\- Start the API:
-
+```bash
 uvicorn app.app:app --reload
+```
 
+Open Swagger UI:
 
+```text
+http://127.0.0.1:8000/docs
+```
 
--Endpoint: /predict
+Health check:
 
-Accepts image uploads and returns JSON containing:
+```text
+GET /health
+```
 
+Prediction:
 
+```text
+POST /predict/
+```
 
-* labels
-* confidence
-* bounding boxes
+Example:
 
+```bash
+curl -X POST -F "file=@sample.jpg" http://127.0.0.1:8000/predict/
+```
 
+The API returns detected class labels, confidence scores, bounding boxes and the path of the annotated result.
 
--Test via Postman or curl:
+## 🐳 Docker
 
-curl -X POST -F "file=@sample.jpg" http://localhost:8000/predict
+Build:
 
+```bash
+docker build -t helmet-detector .
+```
 
+Run:
 
-7\. \*\*Docker Deployment:\*\*
+```bash
+docker run --rm -p 8000:8000 helmet-detector
+```
 
+Then open:
 
+```text
+http://127.0.0.1:8000/docs
+```
 
-a. Build the Docker image:
+The container expects the model at:
 
+```text
+/app/model/best.pt
+```
 
+You can override it with:
 
-&nbsp; docker build -t helmet-detector .
+```bash
+docker run --rm -p 8000:8000 \
+  -e MODEL_PATH=/app/model/best.pt \
+  helmet-detector
+```
 
+## 🔧 Issues Fixed
 
+This repository was cleaned up to remove several portability/runtime problems:
 
+- Removed hard-coded Windows/OneDrive model paths from the API and webcam application.
+- Made the model location configurable through `MODEL_PATH`.
+- Replaced machine-specific Google Drive paths in `data/data.yaml` with repository-relative paths.
+- Fixed the YOLO training argument from `batch_size` to Ultralytics' `batch` parameter.
+- Fixed the training results handling and project-directory configuration.
+- Fixed the inference script's undefined `train_results_dir` reference.
+- Fixed the default inference checkpoint path.
+- Removed the invalid `project_dir` argument passed to the training function.
+- Removed Docker's development-only `--reload` mode.
+- Added API `/health` endpoint.
+- Added safer file handling for uploaded images.
+- Added environment-variable support for webcam camera selection and optional recording.
+- Updated documentation to match the actual repository structure.
 
+## 📊 Reported Project Results
 
-b. Run the container:
+According to the project results documented for this portfolio:
 
+| Metric | Result |
+|---|---:|
+| Annotated training images | 6,000+ |
+| Reported mAP | 86% |
+| Reported inference latency | ~1.5 ms |
+| Reported accuracy improvement after validation | 12% |
 
+These figures describe the project's reported evaluation results and should be reproduced with the same dataset, model, hardware and evaluation procedure before being treated as independently benchmarked results.
 
-&nbsp; docker run -p 8000:8000 helmet-detector
+## 🔐 Git LFS
 
+The trained `model/best.pt` file is stored through **Git LFS**.
 
+After cloning, make sure Git LFS is installed and pull the model:
 
+```bash
+git lfs install
+git lfs pull
+```
 
+If you do not need the pretrained model, you can train a new checkpoint using `src/train.py`.
 
-c. Access API at http://localhost:8000/predict
+## 👨‍💻 Author
 
+**MD Saif Ali**
 
+AI/ML Engineer focused on Machine Learning, Generative AI, RAG, NLP and Computer Vision.
 
-Live Testing \& Improvements
+- GitHub: https://github.com/mohdsaif13
+- LinkedIn: https://www.linkedin.com/in/md-saif-ali-a3250825b/
 
+## 📄 License
 
-
-Webcam feed detection
-
-
-
-Batch inference on multiple images
-
-
-
-Analyze accuracy, false positives, and edge cases
-
-
-
-
-
-8\. \*\*Future enhancements:\*\*
-
-
-
-* Helmet-type classification
-* Sound alerts or visual dashboard
-* Multi-camera integration
-
-
-
-
-
-
-
+No license file is currently included in this repository.
