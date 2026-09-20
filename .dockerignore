@@ -1,32 +1,18 @@
-# Python cache
+.git/
+.github/
 __pycache__/
 *.py[cod]
-
-# Virtual environments
+*.ipynb_checkpoints
 venv/
 env/
-
-# Jupyter notebooks checkpoints
-.ipynb_checkpoints/
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-
-# Git
-.git/
-.gitignore
-
-# IDE configs
+.env
 .vscode/
 .idea/
-
-# App runtime folders
+.DS_Store
+Thumbs.db
 uploads/
 results/
-
-# Environment files
-.env
+runs/
+train/
+Light_Bundles/
+video_feed/
