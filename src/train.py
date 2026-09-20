@@ -1,64 +1,69 @@
-import os
 import argparse
 import shutil
+from pathlib import Path
+
 from ultralytics import YOLO
+
 from utils import ensure_dir, plot_training_curves
 
 
-def train(data_yaml, epochs=50, img_size=640, weights="yolov8s.pt"):
-    """
-    Train YOLOv8 on the helmet dataset.
-    Saves: weights, results.csv, plots.
-    Also copies best.pt into model/yolov8/.
-    """
-
-   
-
+def train(
+    data_yaml: str,
+    epochs: int = 50,
+    img_size: int = 640,
+    batch_size: int = 16,
+    weights: str = "yolov8s.pt",
+    project_dir: str = "train/helmet_yolov8",
+):
+    """Train YOLOv8 and copy the best checkpoint into model/yolov8/."""
     model = YOLO(weights)
 
-    # Train
     results = model.train(
         data=data_yaml,
         epochs=epochs,
-        batch_size = 16,
-        amp = True,
-        patience = 15,
+        batch=batch_size,
         imgsz=img_size,
-        exist_ok=False
+        amp=True,
+        patience=15,
+        project=project_dir,
+        name="exp",
+        exist_ok=False,
     )
 
-    exp_dir = results[0].save_dir  # e.g. train/helmet_yolov8/exp
-    print(f" Training complete. Results saved to {exp_dir}")
+    exp_dir = Path(results.save_dir)
+    print(f"Training complete. Results saved to {exp_dir}")
 
-    # Plot training curves
-    results_csv = os.path.join(exp_dir, "results.csv")
-    plot_training_curves(results_csv, exp_dir)
+    results_csv = exp_dir / "results.csv"
+    plot_training_curves(str(results_csv), str(exp_dir))
 
-    # Copy best weights to model/yolov8/
-    best_weight = os.path.join(exp_dir, "weights", "best.pt")
-    target_dir = "model/yolov8"
-    ensure_dir(target_dir)
-    if os.path.exists(best_weight):
-        shutil.copy(best_weight, os.path.join(target_dir, "best.pt"))
-        print(f" Best weights copied to {target_dir}/best.pt")
+    best_weight = exp_dir / "weights" / "best.pt"
+    target_dir = Path("model") / "yolov8"
+    ensure_dir(str(target_dir))
+
+    if best_weight.exists():
+        shutil.copy2(best_weight, target_dir / "best.pt")
+        print(f"Best weights copied to {target_dir / 'best.pt'}")
     else:
-        print(" Warning: best.pt not found, copy skipped.")
+        print("Warning: best.pt not found, copy skipped.")
 
-    return exp_dir
+    return str(exp_dir)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--data", type=str, default="data/data.yaml", help="Path to dataset YAML")
-    parser.add_argument("--epochs", type=int, default=50, help="Number of epochs")
-    parser.add_argument("--img", type=int, default=640, help="Image size for training")
-    parser.add_argument("--weights", type=str, default="yolov8s.pt", help="Pretrained weights")
+    parser = argparse.ArgumentParser(description="Train YOLOv8 helmet detector")
+    parser.add_argument("--data", type=str, default="data/data.yaml")
+    parser.add_argument("--epochs", type=int, default=50)
+    parser.add_argument("--img-size", type=int, default=640)
+    parser.add_argument("--batch-size", type=int, default=16)
+    parser.add_argument("--weights", type=str, default="yolov8s.pt")
+    parser.add_argument("--project-dir", type=str, default="train/helmet_yolov8")
     args = parser.parse_args()
 
     train(
         data_yaml=args.data,
         epochs=args.epochs,
-        img_size=args.img,
+        img_size=args.img_size,
+        batch_size=args.batch_size,
         weights=args.weights,
-        project_dir="train/helmet_yolov8"
+        project_dir=args.project_dir,
     )
