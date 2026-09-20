@@ -1,106 +1,121 @@
-# app/app.py
-
 import os
 import uuid
 import shutil
+from pathlib import Path
+
 import cv2
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel
 from ultralytics import YOLO
 
-# =========================
-# CONFIG
-# =========================
-MODEL_PATH = os.path.join("C:/Users/hp/OneDrive/Desktop/Helmet detection/model/best.pt")
-UPLOAD_DIR = os.path.join("app/uploads")
-RESULTS_DIR = os.path.join("app/results")
+BASE_DIR = Path(__file__).resolve().parents[1]
+MODEL_PATH = Path(os.getenv("MODEL_PATH", BASE_DIR / "model" / "best.pt"))
+UPLOAD_DIR = BASE_DIR / "uploads"
+RESULTS_DIR = BASE_DIR / "results"
 
-os.makedirs(UPLOAD_DIR, exist_ok=True)
-os.makedirs(RESULTS_DIR, exist_ok=True)
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
-# =========================
-# APP + MODEL INIT
-# =========================
-app = FastAPI(title="Helmet Detection API", description="YOLOv8 REST API for helmet detection")
+app = FastAPI(
+    title="Helmet Detection API",
+    description="YOLOv8 REST API for helmet detection",
+    version="1.0.0",
+)
 
 try:
-    model = YOLO(MODEL_PATH)
-except Exception as e:
-    raise RuntimeError(f" Could not load YOLO model from {MODEL_PATH}. Error: {e}")
+    model = YOLO(str(MODEL_PATH))
+except Exception as exc:
+    raise RuntimeError(
+        f"Could not load YOLO model from '{MODEL_PATH}'. "
+        "Set MODEL_PATH to a valid .pt file."
+    ) from exc
 
 
-# =========================
-# RESPONSE MODELS
-# =========================
 class PredictionResponse(BaseModel):
     filename: str
-    detections: list
-    result_url: HttpUrl
+    detections: list[dict]
+    result_url: str
 
 
-# =========================
-# ROOT ENDPOINT
-# =========================
 @app.get("/")
 async def root():
-    return {"message": " Helmet Detection API is running! Visit /docs for Swagger UI."}
+    return {"message": "Helmet Detection API is running. Visit /docs for Swagger UI."}
 
 
-# =========================
-# PREDICT ENDPOINT
-# =========================
+@app.get("/health")
+async def health():
+    return {"status": "ok", "model": MODEL_PATH.name}
+
+
 @app.post("/predict/", response_model=PredictionResponse)
 async def predict(file: UploadFile = File(...)):
-    # Validate file type
-    if not file.content_type.startswith("image/"):
-        raise HTTPException(status_code=400, detail="Only image files are supported")
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(
+            status_code=400,
+            detail="Only image files are supported.",
+        )
 
-    # Save uploaded file
-    file_id = str(uuid.uuid4())[:8]
-    input_path = os.path.join(UPLOAD_DIR, f"{file_id}.jpg")
-    with open(input_path, "wb") as buffer:
-        shutil.copyfileobj(file.file, buffer)
+    file_id = uuid.uuid4().hex[:8]
+    input_path = UPLOAD_DIR / f"{file_id}.jpg"
 
-    # Run YOLO prediction
     try:
-        results = model.predict(source=input_path, save=False, conf=0.25)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Inference failed: {e}")
+        with input_path.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
 
-    # Process results
-    detections = []
-    pred_obj = results[0]
-    for box in pred_obj.boxes:
-        x1, y1, x2, y2 = map(float, box.xyxy[0])
-        conf = float(box.conf[0])
-        cls_id = int(box.cls[0])
-        detections.append({
-            "class_id": cls_id,
-            "label": model.names[cls_id],
-            "confidence": round(conf, 3),
-            "box": [x1, y1, x2, y2]
-        })
+        results = model.predict(
+            source=str(input_path),
+            save=False,
+            conf=0.25,
+            verbose=False,
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Inference failed: {exc}",
+        ) from exc
+    finally:
+        await file.close()
 
-    # Save annotated image
-    annotated_img = pred_obj.plot()
+    pred = results[0]
+    detections: list[dict] = []
+
+    for box in pred.boxes:
+        x1, y1, x2, y2 = map(float, box.xyxy[0].tolist())
+        confidence = float(box.conf[0])
+        class_id = int(box.cls[0])
+
+        detections.append(
+            {
+                "class_id": class_id,
+                "label": model.names[class_id],
+                "confidence": round(confidence, 3),
+                "box": [x1, y1, x2, y2],
+            }
+        )
+
     result_filename = f"{file_id}_result.jpg"
-    result_path = os.path.join(RESULTS_DIR, result_filename)
-    cv2.imwrite(result_path, annotated_img)
+    result_path = RESULTS_DIR / result_filename
+    annotated_img = pred.plot()
+    cv2.imwrite(str(result_path), annotated_img)
 
-    # Return response with a URL to fetch annotated image
     return PredictionResponse(
-        filename=file.filename,
+        filename=file.filename or result_filename,
         detections=detections,
-        result_url=f"http://127.0.0.1:8000/download/{result_filename}"
+        result_url=f"/download/{result_filename}",
     )
 
-# =========================
-# DOWNLOAD ENDPOINT
-# =========================
+
 @app.get("/download/{image_name}")
 async def download_result(image_name: str):
-    path = os.path.join(RESULTS_DIR, image_name)
-    if not os.path.exists(path):
-        raise HTTPException(status_code=404, detail="Result not found")
-    return FileResponse(path, media_type="image/jpeg", filename=image_name)
+    safe_name = Path(image_name).name
+    path = RESULTS_DIR / safe_name
+
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=404, detail="Result not found.")
+
+    return FileResponse(
+        path=str(path),
+        media_type="image/jpeg",
+        filename=safe_name,
+    )
