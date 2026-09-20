@@ -1,74 +1,76 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Aug 27 19:37:31 2025
-
-@author: hp
-"""
 import os
-import cv2
 import time
 from datetime import datetime
+from pathlib import Path
+
+import cv2
 from ultralytics import YOLO
 
-# Load your trained YOLO model
-model = YOLO("C:/Users/hp/OneDrive/Desktop/Helmet detection/model/best.pt")
+BASE_DIR = Path(__file__).resolve().parents[1]
+MODEL_PATH = Path(os.getenv("MODEL_PATH", BASE_DIR / "model" / "best.pt"))
+CAMERA_INDEX = int(os.getenv("CAMERA_INDEX", "0"))
+SAVE_OUTPUT = os.getenv("SAVE_OUTPUT", "false").lower() == "true"
+RUN_SECONDS = float(os.getenv("RUN_SECONDS", "0"))
 
-# Try USB camera (0 = default, 1 = external USB, 2 = another USB, etc.)
-cap = cv2.VideoCapture(2, cv2.CAP_DSHOW)  # change to 0, 1, 2 until your USB cam works
+model = YOLO(str(MODEL_PATH))
+cap = cv2.VideoCapture(CAMERA_INDEX)
 
 if not cap.isOpened():
-    print(" Could not open camera. Check index (0/1/2).")
-    exit()
-# Get FPS from camera
+    raise RuntimeError(
+        f"Could not open camera index {CAMERA_INDEX}. "
+        "Try CAMERA_INDEX=1 or CAMERA_INDEX=2."
+    )
+
 fps = cap.get(cv2.CAP_PROP_FPS)
-if fps == 0 or fps != fps:  # Sometimes returns 0 or NaN
+if not fps or fps != fps:
     fps = 10.0
-print(" Camera FPS:", fps)
 
-# Create output folder
-output_dir = "C:/Users/hp/OneDrive/Desktop/Helmet detection/video_feed"
-os.makedirs(output_dir, exist_ok=True)
+output_path = None
+out = None
 
-# Optional: save the video
-save_output = True
-if save_output:
+if SAVE_OUTPUT:
+    output_dir = BASE_DIR / "video_feed"
+    output_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_path = os.path.join(output_dir, f"webcam_output_{timestamp}.avi")  # mkv format
-    fourcc = cv2.VideoWriter_fourcc(*'XVID')  # XVID is widely supported
+    output_path = output_dir / f"webcam_output_{timestamp}.avi"
+
     frame_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     frame_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    out = cv2.VideoWriter(output_path, fourcc, fps, (frame_width, frame_height))
+    fourcc = cv2.VideoWriter_fourcc(*"XVID")
+    out = cv2.VideoWriter(
+        str(output_path),
+        fourcc,
+        fps,
+        (frame_width, frame_height),
+    )
 
-# Run for 15 seconds
 start_time = time.time()
-print("Recording started")
-time.sleep(0.5)
-while True:
-    success, frame = cap.read()
-    if not success:
-        print(" Failed to grab frame from camera")
-        break
 
-    # Run YOLO detection
-    results = model.predict(frame)
+try:
+    while True:
+        success, frame = cap.read()
+        if not success:
+            print("Failed to grab frame from camera.")
+            break
 
-    # Annotate results
-    annotated_frame = results[0].plot()
+        results = model.predict(frame, conf=0.25, verbose=False)
+        annotated_frame = results[0].plot()
 
-    # Show live window
-    cv2.imshow("YOLO Helmet Detection", annotated_frame)
+        cv2.imshow("YOLO Helmet Detection", annotated_frame)
 
-    # Save video frame
-    if save_output:
-        out.write(annotated_frame)
+        if out is not None:
+            out.write(annotated_frame)
 
-    # Exit on 'q' or after 15 seconds
-    if cv2.waitKey(1) & 0xFF == ord('q'):
-        print("⏹ Exiting on key press")
-        break
-  
-# Release everything
-cap.release()
-if save_output:
-    out.release()
-cv2.destroyAllWindows()
+        if cv2.waitKey(1) & 0xFF == ord("q"):
+            break
+
+        if RUN_SECONDS > 0 and (time.time() - start_time) >= RUN_SECONDS:
+            break
+finally:
+    cap.release()
+    if out is not None:
+        out.release()
+    cv2.destroyAllWindows()
+
+if output_path:
+    print(f"Saved output video to {output_path}")
